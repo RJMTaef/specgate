@@ -1,0 +1,138 @@
+name: SpecGate CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: specgate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  spec-ready:
+    name: Spec Ready
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.11.14'
+          python-version: '3.12'
+          enable-cache: true
+      - run: uv sync --frozen --extra dev
+      - run: uv run specgate gate spec
+
+  pr-ready:
+    name: PR Ready
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.11.14'
+          python-version: '3.12'
+          enable-cache: true
+      - run: uv sync --frozen --extra dev
+      - run: uv run ruff check src tests
+      - run: uv run pytest --cov --cov-report=term-missing --cov-report=json:coverage.json
+      - name: Measure base coverage in isolated checkout
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/specgate-base" "$BASE_SHA"
+          cd "$RUNNER_TEMP/specgate-base"
+          uv sync --frozen --extra dev
+          uv run pytest --cov --cov-report=json:"$RUNNER_TEMP/base-coverage.json"
+      - name: Enforce task evidence, coverage floor, and no regression
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" = pull_request ]; then
+            uv run specgate gate pr --coverage coverage.json --baseline "$RUNNER_TEMP/base-coverage.json"
+          else
+            uv run specgate gate pr --coverage coverage.json
+          fi
+      - name: Record adoption signals
+        if: always()
+        env:
+          PR_CREATED_AT: ${{ github.event.pull_request.created_at }}
+        run: |
+          if [ -n "$PR_CREATED_AT" ]; then
+            uv run specgate metrics --pr-created-at "$PR_CREATED_AT" > metrics.json
+          else
+            uv run specgate metrics > metrics.json
+          fi
+          echo '### SpecGate adoption signals' >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat metrics.json >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gate-evidence
+          path: |
+            coverage.json
+            metrics.json
+            .specgate/audit.sqlite
+          include-hidden-files: true
+          retention-days: 14
+
+  deploy-piv:
+    name: Deploy + PIV
+    needs: [spec-ready, pr-ready]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.11.14'
+          python-version: '3.12'
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: specgate
+          config: deploy/kind.yaml
+      - run: uv sync --frozen --extra dev
+      - run: bash scripts/deploy-local.sh
+      - name: Acceptance-mapped LangGraph PIV
+        run: |
+          kubectl --context kind-specgate -n specgate port-forward svc/screening 8000:8000 > /tmp/port-forward.log 2>&1 &
+          forward_pid=$!
+          trap 'kill "$forward_pid" || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8000/health; then break; fi
+            sleep 1
+          done
+          uv run specgate piv > piv-result.json
+      - name: Capture diagnostics
+        if: failure()
+        run: |
+          kubectl --context kind-specgate -n specgate get pods || true
+          kubectl --context kind-specgate -n specgate logs deployment/screening || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: piv-evidence
+          path: |
+            piv-result.json
+            .specgate/
+          include-hidden-files: true
+          retention-days: 14

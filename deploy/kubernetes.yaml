@@ -1,0 +1,52 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: specgate
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: screening
+  namespace: specgate
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels: {app: screening}
+  template:
+    metadata:
+      labels: {app: screening}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: screening
+          image: specgate:dev
+          imagePullPolicy: Never
+          ports: [{containerPort: 8000}]
+          readinessProbe:
+            httpGet: {path: /health, port: 8000}
+            initialDelaySeconds: 2
+            periodSeconds: 2
+          livenessProbe:
+            httpGet: {path: /health, port: 8000}
+            initialDelaySeconds: 10
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: screening
+  namespace: specgate
+spec:
+  selector: {app: screening}
+  ports: [{port: 8000, targetPort: 8000}]
