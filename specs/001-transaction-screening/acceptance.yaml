@@ -1,0 +1,43 @@
+feature: 001-transaction-screening
+checks:
+  - id: AC-001
+    method: GET
+    path: /health
+    status: 200
+    expected: {status: ok, rules_version: demo-v1}
+  - id: AC-002
+    method: POST
+    path: /screen
+    body: {transaction_id: smoke-2, amount: '25.00', currency: USD, destination_country: CA, beneficiary: Demo Person}
+    status: 200
+    expected: {flagged: false, reasons: []}
+  - id: AC-003
+    method: POST
+    path: /screen
+    body: {transaction_id: smoke-3, amount: '10000.00', currency: USD, destination_country: CA, beneficiary: Demo Person}
+    status: 200
+    expected: {flagged: true, reasons: [LARGE_TRANSFER]}
+  - id: AC-004
+    method: POST
+    path: /screen
+    body: {transaction_id: smoke-4, amount: '25.00', currency: USD, destination_country: XZ, beneficiary: Demo Person}
+    status: 200
+    expected: {flagged: true, reasons: [DEMO_HIGH_RISK_DESTINATION]}
+  - id: AC-005
+    method: POST
+    path: /screen
+    body: {transaction_id: smoke-5, amount: '25.00', currency: USD, destination_country: CA, beneficiary: Blocked Demo Entity}
+    status: 200
+    expected: {flagged: true, reasons: [DEMO_WATCHLIST_MATCH]}
+  - id: AC-006
+    method: POST
+    path: /screen
+    body: {transaction_id: smoke-6, amount: '0.00', currency: USD, destination_country: CA, beneficiary: Demo Person}
+    status: 422
+    expected:
+      detail:
+        - type: greater_than
+          loc: [body, amount]
+          msg: Input should be greater than 0
+          input: '0.00'
+          ctx: {gt: 0}
