@@ -104,6 +104,10 @@ The linked commit must be an ancestor of HEAD, contain file changes, and name
 follow-up evidence commit. This verifies traceability, not semantic correctness
 of the implementation; tests and human review still matter.
 
+Use **merge commits** for PRs. Squash/rebase merges replace implementation SHAs and
+would break task evidence. The protection setup script disables those merge modes
+and binds required checks to the GitHub Actions application.
+
 The MCP server exposes `validate_spec`, `check_gate`, `get_pipeline_status`,
 `run_piv`, and `guard_output`. PR evidence is produced by CI, so the MCP `check_gate`
 call cannot manufacture a passing PR check without test coverage evidence.
@@ -168,6 +172,17 @@ checkpoints; the disposable cluster is not retained for later recovery.
   adversarial or regulated workloads.
 
 ## Adoption signals
+
+Observed bootstrap snapshot, 2026-10-21:
+
+| Signal | Observation | Evidence |
+| --- | --- | --- |
+| PR gate pass rate | 100% (1/1 gate invocation in the initial CI job) | [Initial run and gate-evidence artifact](https://github.com/RJMTaef/specgate/actions/runs/39609824149) |
+| Spec-to-PR time | 183 seconds, first committed spec → first PR creation | [First spec commit](https://github.com/RJMTaef/specgate/commit/d77f33d) → [PR #1](https://github.com/RJMTaef/specgate/pull/1) |
+| Deployed acceptance checks | 6/6 passed in Docker + kind | [Initial run and piv-evidence artifact](https://github.com/RJMTaef/specgate/actions/runs/39609824149) |
+
+This is one bootstrap observation, not a team adoption or development-speed claim.
+It measures committed-spec lead time, not time spent authoring the initial project.
 
 Run `uv run specgate metrics`. CI publishes **gate pass rate** and **spec-to-PR
 time** in the job summary and `gate-evidence` artifact, next to coverage and audit

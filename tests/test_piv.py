@@ -33,6 +33,7 @@ def test_piv_success_all_ac_audited(repo, monkeypatch):
     monkeypatch.setattr(piv.httpx, "Client", lambda **_: TestClient(app))
     result = Pipeline(repo).run_piv(FEATURE, "http://localhost")
     assert result["status"] == "passed"
+    assert result["approval_request"] is None
     assert len(result["results"]) == 6
     events = AuditLog(repo / ".specgate/audit.sqlite").events()
     assert len([e for e in events if e["action"] == "piv.check"]) == 6
@@ -52,6 +53,8 @@ def test_failure_persists_until_human_rejects(repo, monkeypatch):
     monkeypatch.setattr(piv, "rollback", rollback)
     result = piv.run_piv(repo, FEATURE, "http://127.0.0.1:8000")
     assert result["status"] == "awaiting_approval"
+    assert result["approval_request"]["proposal"] == "rollback"
+    assert result["approval_request"]["target"] == "kind-specgate/specgate/screening"
     rollback.assert_not_called()
     # A different invocation reconstructs the graph from SQLite and rejects the proposal.
     assert piv.resume_piv(repo, result["run_id"], False)["status"] == "rejected"
