@@ -1,11 +1,29 @@
 import asyncio
 import json
+import sys
 from datetime import UTC, datetime, timedelta
+
+from mcp import Client, StdioServerParameters
 
 from specgate.audit import AuditLog
 from specgate.mcp_server import create_server
 from specgate.metrics import summarize
 from tests.conftest import FEATURE
+
+
+def test_mcp_stdio_round_trip(repo):
+    async def scenario():
+        params = StdioServerParameters(
+            command=sys.executable, args=["-m", "specgate.mcp_server"], cwd=repo
+        )
+        async with Client(params) as client:
+            tools = await client.list_tools()
+            assert "validate_spec" in {tool.name for tool in tools.tools}
+            result = await client.call_tool("validate_spec", {"feature": FEATURE})
+            assert not result.is_error
+            assert json.loads(result.content[0].text)["passed"] is True
+
+    asyncio.run(scenario())
 
 
 def test_mcp_tool_contract_and_real_dispatch(repo, monkeypatch):

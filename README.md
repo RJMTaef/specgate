@@ -104,6 +104,10 @@ The linked commit must be an ancestor of HEAD, contain file changes, and name
 follow-up evidence commit. This verifies traceability, not semantic correctness
 of the implementation; tests and human review still matter.
 
+Use **merge commits** for PRs. Squash/rebase merges replace implementation SHAs and
+would break task evidence. The protection setup script disables those merge modes
+and binds required checks to the GitHub Actions application.
+
 The MCP server exposes `validate_spec`, `check_gate`, `get_pipeline_status`,
 `run_piv`, and `guard_output`. PR evidence is produced by CI, so the MCP `check_gate`
 call cannot manufacture a passing PR check without test coverage evidence.
