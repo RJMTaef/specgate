@@ -1,0 +1,5 @@
+{
+  "mcpServers": {
+    "specgate": {"command": "uv", "args": ["run", "--frozen", "specgate-mcp"]}
+  }
+}
