@@ -130,7 +130,13 @@ def run_piv(root: Path, feature: str, base_url: str) -> dict:
         result = graph.invoke(
             {"feature": feature, "base_url": url}, {"configurable": {"thread_id": run_id}}
         )
-    return {"run_id": run_id, "status": result["status"], "results": result["results"]}
+    pauses = result.get("__interrupt__", ())
+    return {
+        "run_id": run_id,
+        "status": result["status"],
+        "results": result["results"],
+        "approval_request": pauses[0].value if pauses else None,
+    }
 
 
 def resume_piv(root: Path, run_id: str, approved: bool) -> dict:
