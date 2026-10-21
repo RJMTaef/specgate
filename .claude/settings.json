@@ -1,0 +1,6 @@
+{
+  "hooks": {
+    "PreToolUse": [{"matcher": "", "hooks": [{"type": "command", "command": "uv run --frozen python scripts/claude-hook.py pre"}]}],
+    "PostToolUse": [{"matcher": "", "hooks": [{"type": "command", "command": "uv run --frozen python scripts/claude-hook.py post"}]}]
+  }
+}
